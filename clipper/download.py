@@ -16,6 +16,13 @@ def download(url: str, workdir: str, langs: str) -> tuple[str, list[str]]:
 
     Returns (video_path, subtitle_paths). Subtitles may be empty.
     """
+    marker = os.path.join(workdir, "source_url.txt")
+    existing = _find(workdir)
+    if existing[0] and os.path.isfile(marker) and open(marker, encoding="utf-8").read() == url:
+        return existing  # reuse the source kept from an earlier --dump-transcript run of this URL
+    for old in glob.glob(os.path.join(workdir, "source*")):
+        os.remove(old)
+
     require_binary("yt-dlp")
     template = os.path.join(workdir, "source.%(ext)s")
     cmd = [
@@ -31,18 +38,25 @@ def download(url: str, workdir: str, langs: str) -> tuple[str, list[str]]:
         url,
     ]
     subprocess.run(cmd, check=True)
+    with open(marker, "w", encoding="utf-8") as f:
+        f.write(url)
 
+    video, subs = _find(workdir)
+    if not video:
+        raise RuntimeError("yt-dlp finished but no video file was found.")
+    return video, subs
+
+
+def _find(workdir: str) -> tuple[str, list[str]]:
     videos = [
         p for p in glob.glob(os.path.join(workdir, "source.*"))
-        if not p.endswith((".vtt", ".srt"))
+        if p.endswith((".mp4", ".mkv", ".webm"))
     ]
-    if not videos:
-        raise RuntimeError("yt-dlp finished but no video file was found.")
     subs = sorted(
         glob.glob(os.path.join(workdir, "source*.vtt"))
         + glob.glob(os.path.join(workdir, "source*.srt"))
     )
-    return videos[0], subs
+    return (videos[0] if videos else ""), subs
 
 
 def probe_duration(path: str) -> float:

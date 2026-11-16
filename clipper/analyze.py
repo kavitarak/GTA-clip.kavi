@@ -119,17 +119,14 @@ def _num(value, default: float = 0.0) -> float:
         return default
 
 
-def pick_clips(cues: list[Cue], duration: float, n: int, min_len: float, max_len: float,
-               provider: str, model: str | None = None) -> list[ClipPick]:
-    raw = ask_llm(provider, model, build_prompt(cues, n, min_len, max_len))
-    data = extract_json(raw)
-    items = data.get("clips", []) if isinstance(data, dict) else []
-
+def validate_picks(items, duration: float, n: int, min_len: float,
+                   max_len: float) -> list[ClipPick]:
+    """Turn untrusted clip dicts (from an LLM or a picks file) into safe, non-overlapping picks."""
     picks: list[ClipPick] = []
-    for item in items:
+    for item in items if isinstance(items, list) else []:
         if not isinstance(item, dict):
             continue
-        start = max(0.0, _num(item.get("start"), -1.0))
+        start = _num(item.get("start"), -1.0)
         end = _num(item.get("end"), -1.0)
         if duration:
             end = min(end, duration)
@@ -156,3 +153,14 @@ def pick_clips(cues: list[Cue], duration: float, n: int, min_len: float, max_len
         if len(chosen) == n:
             break
     return chosen
+
+
+def picks_from_json(data, duration: float, n: int, min_len: float, max_len: float) -> list[ClipPick]:
+    items = data.get("clips", []) if isinstance(data, dict) else data
+    return validate_picks(items, duration, n, min_len, max_len)
+
+
+def pick_clips(cues: list[Cue], duration: float, n: int, min_len: float, max_len: float,
+               provider: str, model: str | None = None) -> list[ClipPick]:
+    raw = ask_llm(provider, model, build_prompt(cues, n, min_len, max_len))
+    return picks_from_json(extract_json(raw), duration, n, min_len, max_len)

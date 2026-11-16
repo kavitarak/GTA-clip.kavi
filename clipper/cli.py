@@ -6,7 +6,7 @@ import os
 import shutil
 from pathlib import Path
 
-from .analyze import DEFAULT_MODELS, pick_clips
+from .analyze import DEFAULT_MODELS, build_prompt, pick_clips, picks_from_json
 from .download import download, probe_duration
 from .render import render_clip
 from .subtitles import parse_subtitles, window
@@ -33,6 +33,15 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--plan-only", action="store_true",
                    help="only print the AI's picks, do not render video")
     p.add_argument("--keep-source", action="store_true", help="keep the downloaded source video")
+
+    agent = p.add_argument_group(
+        "agent mode (no API key needed)",
+        "Let Claude Code, Codex, Gemini CLI or Antigravity pick the clips themselves.",
+    )
+    agent.add_argument("--dump-transcript", metavar="FILE",
+                       help="step 1: download, save the transcript + instructions to FILE, then stop")
+    agent.add_argument("--picks", metavar="FILE",
+                       help='step 2: render clips from a JSON file like {"clips": [{"start": 12, "end": 45, ...}]}')
     return p
 
 
@@ -57,11 +66,24 @@ def main(argv: list[str] | None = None) -> int:
         raise SystemExit("The transcript has no readable lines.")
 
     duration = probe_duration(video)
-    print(f"Video {duration:.0f}s, {len(cues)} transcript lines. Asking {args.provider} for picks...")
-    picks = pick_clips(cues, duration, args.clips, args.min_len, args.max_len,
-                       args.provider, args.model)
+
+    if args.dump_transcript:
+        Path(args.dump_transcript).write_text(
+            build_prompt(cues, args.clips, args.min_len, args.max_len), encoding="utf-8"
+        )
+        print(f"Transcript saved to {args.dump_transcript} ({len(cues)} lines, video {duration:.0f}s).")
+        print("Next: write the picks JSON, then run again with --picks FILE.")
+        return 0
+
+    if args.picks:
+        data = json.loads(Path(args.picks).read_text(encoding="utf-8"))
+        picks = picks_from_json(data, duration, args.clips, args.min_len, args.max_len)
+    else:
+        print(f"Video {duration:.0f}s, {len(cues)} transcript lines. Asking {args.provider} for picks...")
+        picks = pick_clips(cues, duration, args.clips, args.min_len, args.max_len,
+                           args.provider, args.model)
     if not picks:
-        raise SystemExit("The model returned no usable clips. Try another --provider or --model.")
+        raise SystemExit("No usable clips. Check the start/end times and --min-len/--max-len.")
 
     manifest = []
     for i, pick in enumerate(picks, 1):

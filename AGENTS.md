@@ -19,6 +19,20 @@ This file is for Claude Code, OpenAI Codex, Gemini CLI, Google Antigravity, Curs
 - Plan only (no rendering): `python -m clipper "<url>" --plan-only --provider gemini`
 - Render: `python -m clipper "<url>" --clips 5 --provider gemini --out output`
 
+## Making clips for the user (agent mode, no API key needed)
+When the user asks you to make clips from a video, YOU pick the clips. Do not ask them for an API key.
+
+1. Check `ffmpeg` and `yt-dlp` are installed. If not, install them (`pip install yt-dlp`; ffmpeg from the OS package manager, `winget install ffmpeg` on Windows, `brew install ffmpeg` on macOS).
+2. Install the project once: `pip install -e .`
+3. Save the transcript: `gtaclip "<URL>" --clips 5 --dump-transcript transcript.txt`
+4. Read `transcript.txt`. It contains the editing instructions and the timestamped transcript. Choose the best moments and write `picks.json`:
+   `{"clips": [{"start": 12.5, "end": 48.0, "title": "...", "hook": "...", "score": 85, "reason": "..."}]}`
+   Write the hook and title in the speaker's language (Hindi, Hinglish or English). Hook: at most 8 words.
+5. Render: `gtaclip "<URL>" --clips 5 --picks picks.json`
+6. Tell the user where the clips are (`output/clip_01.mp4` …) and show them `output/manifest.json`.
+
+For Hindi (Devanagari) captions add `--font "Noto Sans Devanagari"`. If the video has no subtitles, tell the user; Whisper is not built in yet.
+
 ## Rules for changes
 - Keep dependencies minimal. The only runtime dependency is `httpx`. yt-dlp and ffmpeg are external binaries.
 - Never hardcode API keys. Read them from environment variables.

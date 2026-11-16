@@ -55,3 +55,16 @@ def test_write_ass_formats_times(tmp_path):
     content = path.read_text(encoding="utf-8")
     assert "Dialogue: 0,0:00:00.00,0:00:04.00,Hook,,0,0,0,,Wow" in content
     assert "Dialogue: 0,0:00:01.00,0:00:02.50,Caption,,0,0,0,,hi" in content
+
+
+def test_picks_are_validated():
+    from clipper.analyze import picks_from_json
+    data = {"clips": [
+        {"start": 10, "end": 40, "score": 90, "title": "a"},
+        {"start": 20, "end": 50, "score": 80},          # overlaps the first, dropped
+        {"start": 100, "end": 105, "score": 99},        # too short, dropped
+        {"end": 30, "score": 99},                        # no start, dropped
+        {"start": 200, "end": 400, "score": 70},        # clipped to max_len and duration
+    ]}
+    picks = picks_from_json(data, duration=230, n=5, min_len=20, max_len=60)
+    assert [(p.start, p.end) for p in picks] == [(10, 40), (200, 230)]
